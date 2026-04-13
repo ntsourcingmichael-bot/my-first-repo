@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "nano-banana": {
+      "command": "python",
+      "args": ["mcp_servers/nano_banana/server.py"],
+      "env": {
+        "NANO_BANANA_API_KEY": "${NANO_BANANA_API_KEY}",
+        "NANO_BANANA_ENDPOINT": "${NANO_BANANA_ENDPOINT}"
+      }
+    },
+    "airtable": {
+      "command": "python",
+      "args": ["mcp_servers/airtable/server.py"],
+      "env": {
+        "AIRTABLE_API_KEY": "${AIRTABLE_API_KEY}",
+        "AIRTABLE_BASE_ID": "${AIRTABLE_BASE_ID}",
+        "AIRTABLE_TABLE_NAME": "${AIRTABLE_TABLE_NAME}"
+      }
+    }
+  }
+}
