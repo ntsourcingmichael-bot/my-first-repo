@@ -129,3 +129,19 @@ Run `/setup` (or read `setup.md`) — the wizard will:
   * write `System/Context/brand_brief.md`,
   * populate `.env` from `.env.example`,
   * verify every MCP server with a ping.
+
+---
+
+## 9. Review Commands
+
+After a run, creatives land in Airtable with `Status = Pending Review`.
+Reviewers drive the board from Claude Code with three slash commands:
+
+| Command                      | What it does                                                 |
+|------------------------------|--------------------------------------------------------------|
+| `/pending`                   | List every row currently waiting on review.                  |
+| `/approve <record_id>`       | Airtable → Approved; **move** file from `Draft/` to `Final/`.|
+| `/reject <record_id> --reason "..."` | Airtable → Rejected; append reason to Notes.          |
+
+All three shell out to `System/Workflow tools/review.py`, which is the
+single source of truth for the review lifecycle.
