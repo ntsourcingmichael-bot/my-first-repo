@@ -1,0 +1,12 @@
+.env
+.cost_ledger.json
+__pycache__/
+*.pyc
+.venv/
+Working/Output/Draft/**/*.png
+Working/Output/Draft/**/*.mp4
+Working/Output/Final/**/*.png
+Working/Output/Final/**/*.mp4
+Working/Input/**/*.png
+Working/Input/**/*.jpg
+!Working/**/.gitkeep
