@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CES 2027 · KOL 营销方案模拟评估器</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: #0f1624;
+    color: #e7ecf3;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 32px 28px 64px;
+  }
+  header h1 {
+    font-size: 22px;
+    margin: 0 0 6px;
+    letter-spacing: 0.5px;
+  }
+  header .sub {
+    font-size: 13px;
+    color: #8a97ad;
+    margin-bottom: 28px;
+  }
+  header .tag {
+    display: inline-block;
+    background: #1c2740;
+    color: #6fb8ff;
+    border: 1px solid #26365a;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    margin-right: 6px;
+    letter-spacing: 0.5px;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 880px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: #151e33;
+    border: 1px solid #1f2b47;
+    border-radius: 10px;
+    padding: 20px 22px;
+  }
+  .card h2 {
+    font-size: 14px;
+    margin: 0 0 14px;
+    color: #c9d4e8;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+  }
+
+  .group { margin-bottom: 18px; }
+  .group:last-child { margin-bottom: 0; }
+  .group-label {
+    font-size: 12px;
+    color: #8a97ad;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+  }
+  .options {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .opt {
+    flex: 1 1 0;
+    min-width: 96px;
+    background: #1b2640;
+    border: 1px solid #26345a;
+    color: #cfd8ea;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    text-align: center;
+    user-select: none;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+  }
+  .opt:hover { background: #22304f; }
+  .opt.active {
+    background: #2b6bff;
+    border-color: #4f86ff;
+    color: #ffffff;
+    font-weight: 600;
+  }
+  .opt .desc {
+    display: block;
+    font-size: 11px;
+    color: #8a97ad;
+    margin-top: 3px;
+    font-weight: normal;
+  }
+  .opt.active .desc { color: #d7e4ff; }
+
+  .scores { margin-top: 4px; }
+  .score-row {
+    margin-bottom: 14px;
+  }
+  .score-row:last-child { margin-bottom: 0; }
+  .score-head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    margin-bottom: 6px;
+    color: #cfd8ea;
+  }
+  .score-head .hint {
+    font-size: 11px;
+    color: #8a97ad;
+  }
+  .score-val { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .bar {
+    height: 10px;
+    background: #111a2e;
+    border-radius: 5px;
+    overflow: hidden;
+    border: 1px solid #1f2b47;
+  }
+  .bar-fill {
+    height: 100%;
+    width: 0;
+    border-radius: 5px;
+    transition: width 0.25s ease-out;
+  }
+  .bar-trust   .bar-fill { background: linear-gradient(90deg, #2b6bff, #5b8bff); }
+  .bar-feas    .bar-fill { background: linear-gradient(90deg, #22c39a, #4de0b4); }
+  .bar-premium .bar-fill { background: linear-gradient(90deg, #c47cff, #e1a7ff); }
+  .bar-mass    .bar-fill { background: linear-gradient(90deg, #ffa947, #ffcb7d); }
+
+  .advice {
+    margin-top: 18px;
+    background: #11182a;
+    border: 1px solid #1f2b47;
+    border-radius: 8px;
+    padding: 16px 18px;
+  }
+  .advice .a-title {
+    font-size: 13px;
+    color: #6fb8ff;
+    margin: 0 0 6px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  .advice .a-combo {
+    font-size: 12px;
+    color: #8a97ad;
+    margin-bottom: 10px;
+  }
+  .advice .a-body {
+    font-size: 13px;
+    line-height: 1.7;
+    color: #d7dfee;
+  }
+  .advice .a-body strong { color: #ffd27d; font-weight: 600; }
+
+  .hint-bar {
+    margin-top: 22px;
+    font-size: 11px;
+    color: #6a7690;
+    border-top: 1px solid #1f2b47;
+    padding-top: 14px;
+    line-height: 1.7;
+  }
+
+  footer {
+    margin-top: 32px;
+    font-size: 11px;
+    color: #4e5a75;
+    text-align: center;
+    letter-spacing: 0.5px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>CES 2027 · KOL 营销方案模拟评估器</h1>
+    <div class="sub">
+      <span class="tag">内部前置销售工具</span>
+      <span class="tag">v0.1 Lite</span>
+      点击切换组合，实时观察「信任密度 · 落地可行性 · 品牌溢价 · 大众契合」四维张力。
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- 左侧：参数选择 -->
+    <section class="card">
+      <h2>① 配置你的 KOL 组合</h2>
+
+      <div class="group">
+        <div class="group-label">内容类型</div>
+        <div class="options" data-group="content">
+          <div class="opt" data-value="tech">科技评测<span class="desc">硬核、参数、对比</span></div>
+          <div class="opt" data-value="life">生活方式<span class="desc">场景、体验、种草</span></div>
+          <div class="opt" data-value="industry">行业评论<span class="desc">趋势、洞察、垂直</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-label">KOL 层级</div>
+        <div class="options" data-group="tier">
+          <div class="opt" data-value="top">头部大 V<span class="desc">百万+ 粉，稀缺档期</span></div>
+          <div class="opt" data-value="mid">腰部博主<span class="desc">十万级，性价比高</span></div>
+          <div class="opt" data-value="koc">KOC<span class="desc">垂类真实用户</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-label">内容形式</div>
+        <div class="options" data-group="format">
+          <div class="opt" data-value="deep">深度剖析<span class="desc">长视频 / 长文</span></div>
+          <div class="opt" data-value="vlog">趣味探店<span class="desc">Vlog / 直播</span></div>
+          <div class="opt" data-value="flash">短平快快讯<span class="desc">短视频 / 图文</span></div>
+        </div>
+      </div>
+
+      <div class="hint-bar">
+        经验法则：<strong style="color:#8da4cc;">信任密度</strong> 与 <strong style="color:#8da4cc;">落地可行性</strong> 往往呈反比 —— 越稀缺的权威，越贵、越难约档期。这个工具不是为了让您"选对"，而是帮您看清"取舍"。
+      </div>
+    </section>
+
+    <!-- 右侧：评分与策略 -->
+    <section class="card">
+      <h2>② 实时评估</h2>
+      <div class="scores">
+        <div class="score-row bar-trust">
+          <div class="score-head">
+            <span>信任密度 <span class="hint">· 观众相信内容的程度</span></span>
+            <span class="score-val" id="v-trust">—</span>
+          </div>
+          <div class="bar"><div class="bar-fill" id="f-trust"></div></div>
+        </div>
+        <div class="score-row bar-feas">
+          <div class="score-head">
+            <span>落地可行性 <span class="hint">· 成本可控 & 档期可约</span></span>
+            <span class="score-val" id="v-feas">—</span>
+          </div>
+          <div class="bar"><div class="bar-fill" id="f-feas"></div></div>
+        </div>
+        <div class="score-row bar-premium">
+          <div class="score-head">
+            <span>品牌溢价 <span class="hint">· 对企业形象的拉升</span></span>
+            <span class="score-val" id="v-premium">—</span>
+          </div>
+          <div class="bar"><div class="bar-fill" id="f-premium"></div></div>
+        </div>
+        <div class="score-row bar-mass">
+          <div class="score-head">
+            <span>大众刚需契合度 <span class="hint">· 出圈传播的可能性</span></span>
+            <span class="score-val" id="v-mass">—</span>
+          </div>
+          <div class="bar"><div class="bar-fill" id="f-mass"></div></div>
+        </div>
+      </div>
+
+      <div class="advice">
+        <div class="a-title" id="a-title">请先完成左侧三项选择</div>
+        <div class="a-combo" id="a-combo">—</div>
+        <div class="a-body" id="a-body">选择一个组合后，这里会给出对应的落地策略建议，包括锁档建议、置换思路、以及与展位资源的联动方式。</div>
+      </div>
+    </section>
+  </div>
+
+  <footer>展会不仅卖位置，更卖"到场即有声量"的落地能力 · Internal Use Only</footer>
+</div>
+
+<script>
+  // —— 维度打分表（0-100） ——
+  // 每项选项对各维度的独立贡献，最终四维 = 三项选择的平均值
+  const SCORE = {
+    content: {
+      tech:     { trust: 95, feas: 35, premium: 85, mass: 45 },
+      life:     { trust: 55, feas: 80, premium: 55, mass: 90 },
+      industry: { trust: 85, feas: 85, premium: 50, mass: 50 },
+    },
+    tier: {
+      top: { trust: 90, feas: 20, premium: 95, mass: 75 },
+      mid: { trust: 65, feas: 85, premium: 65, mass: 80 },
+      koc: { trust: 75, feas: 98, premium: 30, mass: 55 },
+    },
+    format: {
+      deep:  { trust: 95, feas: 35, premium: 90, mass: 40 },
+      vlog:  { trust: 55, feas: 85, premium: 55, mass: 90 },
+      flash: { trust: 65, feas: 98, premium: 35, mass: 70 },
+    },
+  };
+
+  // —— 三个参考组合的策略文案 ——
+  const PRESET = {
+    "tech|top|deep": {
+      title: "组合 A · 高端旗舰型（信任极致，落地困难）",
+      combo: "科技评测 × 头部大 V × 深度剖析",
+      body:
+        "头部科技博主在 CES 期间档期极其紧张、报价高昂。建议提前半年以 <strong>「独家首发」</strong> 或 <strong>「高管闭门访谈」</strong> 的形式锁定档期，不要用常规发稿费去砸 —— 而是用 <strong>稀缺展会资源</strong>（前排展位曝光、媒体日优先采访权、CEO 1v1 时段）去置换。预算策略：把 70% 的 KOL 预算压在 1-2 个 S 级博主上，其余用尾部补量。"
+    },
+    "life|mid|vlog": {
+      title: "组合 B · 走量爆款型（性价比最高，大众化破圈）",
+      combo: "生活方式 × 腰部博主 × 趣味探店 Vlog",
+      body:
+        "这是 CES 场景下性价比最高的 <strong>「走量」</strong> 组合。生活方式博主更看重现场可拍性，建议在展位设计中加入 <strong>打卡点、互动装置、沉浸体验区</strong>。可以 <strong>同一时段邀请 5-8 位腰部博主</strong> 同时到场，让他们的探店 Vlog 在 48 小时内形成社群共振，制造「大家都去了 CES 那个展位」的声量错觉。重点投放 TikTok / 小红书 / 视频号。"
+    },
+    "industry|koc|flash": {
+      title: "组合 C · 精准获客型（低成本，线索导向）",
+      combo: "行业评论 × KOC × 短平快快讯",
+      body:
+        "适合以 <strong>B 端获客</strong> 为首要目标的参展企业。给这些垂类 KOC 分发带 <strong>UTM 追踪链接的专属优惠码</strong>，让他们在各自的专业社群、LinkedIn、行业论坛发快速展会动态。每条内容成本低、精准度高，适合做线索漏斗的顶端。配合展位端的 <strong>二维码名片 + 表单登记</strong>，可直接量化 ROI。"
+    },
+  };
+
+  // —— 通用策略（非预设组合时） ——
+  function genericAdvice(scores, choice) {
+    const tips = [];
+    if (scores.trust >= 80 && scores.feas <= 45) {
+      tips.push("这是一个 <strong>信任密度极高但档期稀缺</strong> 的方案，建议用展位资源置换而非现金采购。");
+    }
+    if (scores.feas >= 80 && scores.premium <= 50) {
+      tips.push("方案 <strong>易落地但品牌溢价偏弱</strong>，适合走量获客，不适合做品牌主视觉发布。");
+    }
+    if (scores.mass >= 80) {
+      tips.push("<strong>大众传播潜力强</strong>，建议在展位设置明显打卡点与互动装置，放大二次传播。");
+    }
+    if (scores.premium >= 80) {
+      tips.push("<strong>品牌溢价强</strong>，建议配合 CEO 演讲 / 新品首发等重资源联动。");
+    }
+    if (scores.trust < 60 && scores.premium < 60) {
+      tips.push("四维偏弱，建议调整至少一项 —— 比如提升 KOL 层级或改用深度内容形式。");
+    }
+    if (tips.length === 0) {
+      tips.push("组合较为均衡。可以进一步明确营销目标（品牌 / 获客 / 出圈）来决定资源倾斜方向。");
+    }
+    return {
+      title: "自定义组合 · 策略提示",
+      combo: labelOf(choice),
+      body: tips.join("<br/><br/>"),
+    };
+  }
+
+  const LABELS = {
+    content: { tech: "科技评测", life: "生活方式", industry: "行业评论" },
+    tier:    { top: "头部大 V", mid: "腰部博主", koc: "KOC" },
+    format:  { deep: "深度剖析", vlog: "趣味探店", flash: "短平快快讯" },
+  };
+  function labelOf(c) {
+    return `${LABELS.content[c.content]} × ${LABELS.tier[c.tier]} × ${LABELS.format[c.format]}`;
+  }
+
+  // —— 状态 ——
+  const state = { content: null, tier: null, format: null };
+
+  // —— 交互绑定 ——
+  document.querySelectorAll(".options").forEach(group => {
+    const key = group.dataset.group;
+    group.addEventListener("click", (e) => {
+      const opt = e.target.closest(".opt");
+      if (!opt) return;
+      group.querySelectorAll(".opt").forEach(o => o.classList.remove("active"));
+      opt.classList.add("active");
+      state[key] = opt.dataset.value;
+      render();
+    });
+  });
+
+  // —— 渲染 ——
+  function render() {
+    if (!state.content || !state.tier || !state.format) return;
+
+    const a = SCORE.content[state.content];
+    const b = SCORE.tier[state.tier];
+    const c = SCORE.format[state.format];
+    const avg = (k) => Math.round((a[k] + b[k] + c[k]) / 3);
+    const s = {
+      trust: avg("trust"),
+      feas: avg("feas"),
+      premium: avg("premium"),
+      mass: avg("mass"),
+    };
+
+    setScore("trust", s.trust);
+    setScore("feas", s.feas);
+    setScore("premium", s.premium);
+    setScore("mass", s.mass);
+
+    const key = `${state.content}|${state.tier}|${state.format}`;
+    const preset = PRESET[key];
+    const adv = preset || genericAdvice(s, state);
+    document.getElementById("a-title").textContent = adv.title;
+    document.getElementById("a-combo").textContent = preset ? adv.combo : adv.combo;
+    document.getElementById("a-body").innerHTML = adv.body;
+  }
+
+  function setScore(k, v) {
+    document.getElementById("v-" + k).textContent = v;
+    document.getElementById("f-" + k).style.width = v + "%";
+  }
+</script>
+</body>
+</html>
