@@ -468,6 +468,7 @@ class ExhibitionAgent:
         )
         self.model = model
         self.messages: list[dict] = []
+        self.last_report: dict | None = None  # 供 Streamlit 读取最新生成的报告
 
     def _execute_tool(self, tool_name: str, tool_input: dict) -> str:
         handler = TOOL_HANDLERS.get(tool_name)
@@ -479,8 +480,12 @@ class ExhibitionAgent:
         except Exception as exc:
             return json.dumps({"error": str(exc)}, ensure_ascii=False)
 
-    def chat(self, user_message: str) -> str:
-        """发送消息，处理工具调用循环，返回最终回复文本。"""
+    def chat(self, user_message: str, on_token=None) -> str:
+        """发送消息，处理工具调用循环，返回最终回复文本。
+
+        on_token: 可选回调函数 (text: str) -> None，用于 Streamlit 流式展示。
+                  为 None 时退回 CLI 模式（直接 print）。
+        """
         self.messages.append({"role": "user", "content": user_message})
 
         system = [
@@ -508,8 +513,12 @@ class ExhibitionAgent:
                         event.type == "content_block_delta"
                         and event.delta.type == "text_delta"
                     ):
-                        print(event.delta.text, end="", flush=True)
-                        full_text += event.delta.text
+                        text = event.delta.text
+                        full_text += text
+                        if on_token:
+                            on_token(text)
+                        else:
+                            print(text, end="", flush=True)
 
                 final = stream.get_final_message()
                 stop_reason = final.stop_reason
@@ -525,23 +534,28 @@ class ExhibitionAgent:
 
             # 无客户端工具调用 → 对话结束
             if stop_reason != "tool_use" or not tool_use_blocks:
-                print()
+                if not on_token:
+                    print()
                 self.messages.append({"role": "assistant", "content": full_text or final.content})
                 return full_text
 
             # 执行客户端工具
-            print()
+            if not on_token:
+                print()
             self.messages.append({"role": "assistant", "content": final.content})
 
             tool_results = []
             for tb in tool_use_blocks:
-                print(f"\n[生成报告中...]")
+                if not on_token:
+                    print(f"\n[生成报告中...]")
                 raw = self._execute_tool(tb.name, dict(tb.input))
                 result_data = json.loads(raw)
 
                 if tb.name == "generate_assessment_report" and result_data.get("success"):
-                    print("\n" + result_data["report_text"])
-                    print(f"\n[报告已保存至：{result_data['file_path']}]")
+                    self.last_report = result_data  # Streamlit 通过此字段读取报告
+                    if not on_token:
+                        print("\n" + result_data["report_text"])
+                        print(f"\n[报告已保存至：{result_data['file_path']}]")
 
                 tool_results.append(
                     {
@@ -555,7 +569,9 @@ class ExhibitionAgent:
 
     def reset(self):
         self.messages.clear()
-        print("[对话已重置，开始新的咨询]")
+        self.last_report = None
+        if True:  # always print in CLI context
+            print("[对话已重置，开始新的咨询]")
 
 
 # ──────────────────────────────────────────────
