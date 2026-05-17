@@ -1,164 +1,381 @@
 """
-智能体 (Intelligent Agent)
-使用 Claude API 构建的通用对话助手，支持工具调用和提示词缓存。
+展会参展顾问智能体
+帮助国内科技企业、品牌及外贸工厂评估海外展会参展可行性。
+通过实时搜索展会主办方官网、社交媒体、参展企业新闻稿等信源，提供精准匹配与可行性评估。
 """
 
 import anthropic
 import json
-import math
 import os
 from datetime import datetime
-from typing import Any
+from pathlib import Path
 
 # ──────────────────────────────────────────────
-# 工具实现
+# 工具实现（客户端执行）
 # ──────────────────────────────────────────────
 
-def get_weather(location: str, unit: str = "celsius") -> dict:
-    """模拟天气查询（实际使用时替换为真实 API）。"""
-    weather_db = {
-        "北京":    {"temp": 25, "condition": "晴朗", "humidity": 40},
-        "上海":    {"temp": 28, "condition": "多云", "humidity": 65},
-        "广州":    {"temp": 32, "condition": "雷阵雨", "humidity": 80},
-        "成都":    {"temp": 22, "condition": "阴天", "humidity": 70},
-        "beijing": {"temp": 25, "condition": "Sunny", "humidity": 40},
-        "shanghai":{"temp": 28, "condition": "Cloudy", "humidity": 65},
+def generate_assessment_report(
+    company_name: str,
+    # 9个必填用户画像字段
+    products: str,
+    industry: str,
+    application_scenarios: str,
+    company_size: str,
+    business_model: str,
+    profit_model: str,
+    channel_type: str,
+    manufacturing_capability: str,
+    brand_capability: str,
+    # 参展需求
+    exhibition_goals: list[str],
+    budget_range: str,
+    historical_experience: str,
+    # 推荐结果
+    recommended_exhibitions: list[dict],
+    overall_verdict: str,
+    key_risks: str,
+    action_items: list[str],
+    match_reasoning: str,
+    consultant_notes: str = "",
+) -> dict:
+    """生成结构化的参展可行性评估报告，并保存为文件。"""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_name = company_name.replace(" ", "_").replace("/", "-")[:30]
+
+    lines = [
+        "=" * 60,
+        "       展会参展可行性评估报告",
+        "=" * 60,
+        f"生成时间：{datetime.now().strftime('%Y年%m月%d日 %H:%M')}",
+        "",
+        "【企业用户画像】",
+        f"  公司名称：{company_name}",
+        f"  主要产品：{products}",
+        f"  所属行业：{industry}",
+        f"  应用场景：{application_scenarios}",
+        f"  企业规模：{company_size}",
+        f"  商业模式：{business_model}",
+        f"  盈利模式：{profit_model}",
+        f"  渠道类型：{channel_type}",
+        f"  加工能力：{manufacturing_capability}",
+        f"  品牌能力：{brand_capability}",
+        "",
+        "【参展需求】",
+        f"  核心目标：{'；'.join(exhibition_goals)}",
+        f"  预算区间：{budget_range}",
+        f"  历史经验：{historical_experience}",
+        "",
+        "【推荐展会】",
+    ]
+
+    for i, ex in enumerate(recommended_exhibitions, 1):
+        score = ex.get("match_score", 0)
+        stars = "★" * score + "☆" * (5 - score)
+        lines += [
+            f"  {i}. {ex.get('name', '未知')}",
+            f"     时间/地点：{ex.get('date_location', '待确认')}",
+            f"     费用估算：{ex.get('estimated_cost', '待询价')}",
+            f"     匹配度：{stars} ({score}/5)",
+            f"     数据来源：{ex.get('data_sources', '官网/社交媒体')}",
+            f"     推荐理由：{ex.get('reasons', '')}",
+            "",
+        ]
+
+    verdict_map = {
+        "建议参展":   "✅ 建议参展",
+        "谨慎参展":   "⚠️  谨慎参展",
+        "暂不建议":   "❌ 暂不建议参展",
     }
-    key = location.lower()
-    data = weather_db.get(key) or weather_db.get(location)
-    if not data:
-        return {"error": f"未找到 {location} 的天气数据"}
-    temp = data["temp"]
-    if unit == "fahrenheit":
-        temp = round(temp * 9 / 5 + 32, 1)
+    verdict_display = verdict_map.get(overall_verdict, overall_verdict)
+
+    lines += [
+        "【匹配度分析】",
+        f"  {match_reasoning}",
+        "",
+        "【可行性评估结论】",
+        f"  综合建议：{verdict_display}",
+        "",
+        "【主要风险提示】",
+    ]
+    for risk_line in key_risks.split("；"):
+        if risk_line.strip():
+            lines.append(f"  • {risk_line.strip()}")
+
+    lines += ["", "【下一步行动建议】"]
+    for idx, item in enumerate(action_items, 1):
+        lines.append(f"  {idx}. {item}")
+
+    if consultant_notes:
+        lines += ["", "【顾问备注】", f"  {consultant_notes}"]
+
+    lines += ["", "=" * 60]
+    report_text = "\n".join(lines)
+
+    reports_dir = Path("reports")
+    reports_dir.mkdir(exist_ok=True)
+    file_path = reports_dir / f"{safe_name}_{timestamp}.txt"
+    file_path.write_text(report_text, encoding="utf-8")
+
     return {
-        "location": location,
-        "temperature": temp,
-        "unit": unit,
-        "condition": data["condition"],
-        "humidity": data["humidity"],
-    }
-
-
-def calculate(expression: str) -> dict:
-    """安全地计算数学表达式。"""
-    allowed = set("0123456789+-*/()., %sqrtpilogabsce ")
-    clean = expression.replace("^", "**")
-    if not all(c in allowed for c in clean.lower()):
-        return {"error": "表达式包含不允许的字符"}
-    try:
-        safe_names = {
-            "sqrt": math.sqrt, "pi": math.pi, "e": math.e,
-            "log": math.log, "abs": abs, "sin": math.sin,
-            "cos": math.cos, "tan": math.tan,
-        }
-        result = eval(clean, {"__builtins__": {}}, safe_names)  # noqa: S307
-        return {"expression": expression, "result": result}
-    except Exception as exc:
-        return {"error": str(exc)}
-
-
-def get_current_time(timezone: str = "Asia/Shanghai") -> dict:
-    """获取当前时间。"""
-    now = datetime.now()
-    return {
-        "timezone": timezone,
-        "datetime": now.strftime("%Y-%m-%d %H:%M:%S"),
-        "date": now.strftime("%Y年%m月%d日"),
-        "time": now.strftime("%H:%M:%S"),
-        "weekday": ["周一","周二","周三","周四","周五","周六","周日"][now.weekday()],
+        "success": True,
+        "report_text": report_text,
+        "file_path": str(file_path),
+        "verdict": overall_verdict,
     }
 
 
 # ──────────────────────────────────────────────
-# 工具定义（发送给 Claude 的 JSON Schema）
+# 工具定义
 # ──────────────────────────────────────────────
 
-TOOLS: list[dict] = [
+BUILTIN_TOOLS = [
+    {"type": "web_search_20260209", "name": "web_search"},
+]
+
+CUSTOM_TOOLS = [
     {
-        "name": "get_weather",
-        "description": "获取指定城市的当前天气信息，包括温度、天气状况和湿度。",
+        "name": "generate_assessment_report",
+        "description": (
+            "在收集完所有9项用户画像信息、参展需求，并通过实时搜索确认推荐展会详情后，"
+            "生成结构化的展会参展可行性评估报告。"
+            "必须在已掌握全部必填字段后才可调用。"
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "location": {
+                "company_name": {
                     "type": "string",
-                    "description": "城市名称，例如：北京、上海、广州",
+                    "description": "公司名称（可匿名填『某科技公司』）",
                 },
-                "unit": {
+                # 9个用户画像字段
+                "products": {
                     "type": "string",
-                    "enum": ["celsius", "fahrenheit"],
-                    "description": "温度单位，默认 celsius（摄氏度）",
+                    "description": "主要产品描述，如：TWS耳机、激光切割机",
+                },
+                "industry": {
+                    "type": "string",
+                    "description": "所属行业，如：消费电子、工业设备、家居家电",
+                },
+                "application_scenarios": {
+                    "type": "string",
+                    "description": "产品的主要应用场景，如：家庭娱乐、工厂自动化、智慧零售",
+                },
+                "company_size": {
+                    "type": "string",
+                    "description": "企业规模，如：初创(<50人)、中小企业(50-500人)、大型企业(>500人)",
+                },
+                "business_model": {
+                    "type": "string",
+                    "description": "商业模式，如：B2B、B2C、B2B2C、ODM、OEM",
+                },
+                "profit_model": {
+                    "type": "string",
+                    "description": "盈利模式，如：产品销售、订阅服务、解决方案集成、代加工费",
+                },
+                "channel_type": {
+                    "type": "string",
+                    "description": "渠道类型，如：直销、经销商/代理商、电商平台、跨境电商",
+                },
+                "manufacturing_capability": {
+                    "type": "string",
+                    "description": "加工能力描述，如：自有工厂/年产能XXX万件、纯贸易/委外代工、具备定制化能力",
+                },
+                "brand_capability": {
+                    "type": "string",
+                    "description": "品牌能力描述，如：自有品牌出海、OEM贴牌为主、正在建立品牌、已有海外注册商标",
+                },
+                # 参展需求
+                "exhibition_goals": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "参展核心目标列表，如：[\"开发新客户\",\"品牌曝光\",\"市场调研\"]",
+                },
+                "budget_range": {
+                    "type": "string",
+                    "description": "参展总预算区间，如：5-10万元、10-30万元",
+                },
+                "historical_experience": {
+                    "type": "string",
+                    "description": "历史参展经验简述",
+                },
+                # 推荐结果
+                "recommended_exhibitions": {
+                    "type": "array",
+                    "description": "推荐展会列表（基于实时搜索结果，按匹配度降序排列）",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name":            {"type": "string"},
+                            "date_location":   {"type": "string"},
+                            "estimated_cost":  {"type": "string"},
+                            "match_score":     {"type": "integer", "minimum": 1, "maximum": 5},
+                            "data_sources":    {"type": "string", "description": "信息来源（官网/社交媒体/新闻稿）"},
+                            "reasons":         {"type": "string"},
+                        },
+                        "required": ["name", "match_score", "reasons"],
+                    },
+                },
+                "overall_verdict": {
+                    "type": "string",
+                    "enum": ["建议参展", "谨慎参展", "暂不建议"],
+                    "description": "综合可行性结论",
+                },
+                "key_risks": {
+                    "type": "string",
+                    "description": "主要风险，用中文分号分隔",
+                },
+                "action_items": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "建议的后续行动步骤",
+                },
+                "match_reasoning": {
+                    "type": "string",
+                    "description": (
+                        "基于用户9项画像对推荐展会匹配度的综合推理说明，"
+                        "解释为何这些展会最适合该企业的产品、目标市场、商业模式和品牌能力"
+                    ),
+                },
+                "consultant_notes": {
+                    "type": "string",
+                    "description": "顾问额外备注（可选）",
                 },
             },
-            "required": ["location"],
-        },
-    },
-    {
-        "name": "calculate",
-        "description": "计算数学表达式，支持加减乘除、幂运算(^)、sqrt、sin、cos、tan、log、pi、e 等。",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "expression": {
-                    "type": "string",
-                    "description": "要计算的数学表达式，例如：2^10、sqrt(144)、sin(pi/2)",
-                },
-            },
-            "required": ["expression"],
-        },
-    },
-    {
-        "name": "get_current_time",
-        "description": "获取当前日期和时间。",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "timezone": {
-                    "type": "string",
-                    "description": "时区，例如：Asia/Shanghai（默认）",
-                },
-            },
-            "required": [],
+            "required": [
+                "company_name",
+                "products", "industry", "application_scenarios",
+                "company_size", "business_model", "profit_model",
+                "channel_type", "manufacturing_capability", "brand_capability",
+                "exhibition_goals", "budget_range", "historical_experience",
+                "recommended_exhibitions", "overall_verdict",
+                "key_risks", "action_items", "match_reasoning",
+            ],
         },
     },
 ]
 
-# 工具名称 → 函数的映射
-TOOL_HANDLERS: dict[str, Any] = {
-    "get_weather": get_weather,
-    "calculate": calculate,
-    "get_current_time": get_current_time,
+ALL_TOOLS = BUILTIN_TOOLS + CUSTOM_TOOLS
+
+TOOL_HANDLERS = {
+    "generate_assessment_report": generate_assessment_report,
 }
 
 # ──────────────────────────────────────────────
-# 系统提示词（会被缓存以节省成本）
+# 系统提示词
 # ──────────────────────────────────────────────
 
-SYSTEM_PROMPT = """你是一个智能助手，能够回答问题、进行多轮对话，并通过工具获取实时信息。
+SYSTEM_PROMPT = """你是一位资深展会参展顾问，专门帮助中国科技企业（包括品牌商、OEM/ODM外贸工厂）评估海外展会的参展可行性。
 
-## 你的能力
-- 回答各类知识性问题
-- 进行自然、流畅的多轮对话，记住对话历史
-- 通过工具查询天气、进行数学计算、获取当前时间
-- 用中文或英文回复（跟随用户语言）
+## 核心差异化能力
+与市场上其他展会查询平台不同，你的数据来源是**实时**的：
+- 展会主办方官方网站（最新公告、展商名录、参展规格）
+- 主办方社交媒体账号（LinkedIn、Twitter/X、Facebook、Instagram）
+- 参展企业新闻稿和行业媒体报道
+- 展会官方博客和邮件通讯摘要
 
-## 工具使用原则
-- 只在真正需要时才调用工具（比如用户明确询问天气、时间、数学计算）
-- 调用工具后，用友好的自然语言整合结果向用户说明
-- 若工具返回错误，诚实告知用户并提供替代建议
+你不依赖陈旧的静态数据库，每次推荐均基于当前可检索的最新信息。
 
-## 回复风格
-- 简洁清晰，避免冗余
-- 友好自然，像朋友交谈
-- 复杂问题分步骤解释"""
+## 第一阶段：收集用户画像（9项必填）
+
+必须逐步收集以下全部9项信息，每轮对话只提问1-2项，保持自然的对话节奏：
+
+1. **产品** — 主要产品是什么（品类、型号、核心功能）
+2. **行业** — 所属行业细分（如：消费电子/TWS耳机，工业设备/激光切割机）
+3. **应用场景** — 产品主要用于哪些场景（家庭/商用/工业/医疗等）
+4. **企业规模** — 员工人数或年营收量级
+5. **商业模式** — B2B / B2C / B2B2C / ODM / OEM（或组合）
+6. **盈利模式** — 主要收入来源（产品销售/代加工费/订阅/解决方案等）
+7. **渠道类型** — 现有销售渠道（直销/经销商/跨境电商/平台等）
+8. **加工能力** — 自有工厂还是委外？年产能大概是多少？是否支持定制？
+9. **品牌能力** — 是否有自有品牌？品牌在目标市场的知名度？是否有海外商标？
+
+同时收集参展需求（可与画像穿插提问）：
+- 参展核心目标（开发客户/品牌曝光/维护关系/市场调研/竞品分析等）
+- 参展总预算（展位费+布展+差旅+样品综合估算）
+- 历史参展经验（海外或国内展会经历、效果）
+- 目标出海市场（北美/欧洲/东南亚/中东等）
+
+**收集原则**：
+- 每次只问1-2个问题，不要一次性列出清单
+- 用追问方式确认模糊答案（如"您提到B2B，主要是直接对接品牌商还是经销商？"）
+- 在9项画像未收集完整前，不进入展会搜索阶段
+
+## 第二阶段：实时展会搜索与数据采集
+
+收集完整用户画像后，执行多轮精准搜索，重点定向实时信源：
+
+### 搜索策略
+
+**第1轮：定位候选展会**
+- 搜索词：`[行业关键词] trade show [目标市场] 2025 2026 site:linkedin.com OR site:twitter.com OR site:facebook.com`
+- 搜索词：`[行业关键词] exhibition [目标市场] 2025 official announcement`
+- 搜索词：`[产品类别] expo [目标市场] exhibitor news press release`
+
+**第2轮：核实展会实时信息**
+- 针对每个候选展会，搜索其官方网站获取：最新日期、地点、展位费、展商规模
+- 搜索主办方社交媒体（LinkedIn公司主页、官方Twitter）获取最新动态
+- 搜索格式：`"[展会名称]" 2025 2026 exhibitor booth fee registration official`
+
+**第3轮：竞争格局与参展企业分析**
+- 搜索同类中国企业在该展会的参展情况（验证行业匹配度）
+- 搜索格式：`"[展会名称]" Chinese exhibitor [产品类别] 参展`
+
+**第4轮：ROI参考数据（可选，预算充足时）**
+- 搜索该展会往届参展商评价和效果反馈
+- 搜索格式：`"[展会名称]" exhibitor review ROI leads generated`
+
+### 数据质量要求
+- 优先采用来自官方网站（`.org`、官方域名）和主办方社交媒体的信息
+- 标注每条关键信息的来源（官网/LinkedIn/Twitter/新闻稿）
+- 如果搜索结果中有日期，记录信息的发布时间，优先采用最新信息
+- 对无法实时确认的信息，明确标注"待向主办方确认"
+
+## 第三阶段：匹配度分析与报告生成
+
+### 基于用户画像的匹配度评分（1-5星）
+
+综合以下维度对每个展会评分：
+
+| 维度 | 评分依据 |
+|------|---------|
+| 产品/行业匹配 | 展会主要行业与用户产品的重叠程度 |
+| 应用场景匹配 | 展会买家需求与产品应用场景的契合度 |
+| 商业模式匹配 | B2B/ODM展会 vs 消费者展会；OEM工厂适合采购展而非消费品展 |
+| 渠道匹配 | 展会专业观众类型（批发商/零售商/系统集成商）与用户渠道策略 |
+| 品牌能力适配 | 纯代工厂在品牌展会的回报率通常低于自有品牌企业 |
+| 预算可行性 | 综合展位费+布展+差旅是否在预算范围内 |
+| 目标市场精准度 | 展会地理位置与目标出海市场的匹配 |
+
+**评分标准**：
+- ⭐⭐⭐⭐⭐ (5星)：7项维度高度匹配，强烈推荐
+- ⭐⭐⭐⭐ (4星)：5-6项匹配，有明显优势
+- ⭐⭐⭐ (3星)：3-4项匹配，有一定风险需针对性解决
+- ⭐⭐ (2星)：仅2项匹配，不推荐
+- ⭐ (1星)：基本不匹配
+
+### 整体结论
+- **建议参展**：综合匹配度≥4星，预算可行，ROI预期良好
+- **谨慎参展**：综合匹配度3星，或有某项明显短板需解决
+- **暂不建议**：匹配度≤2星，或预算严重不足，或时机不成熟
+
+完成分析后调用 `generate_assessment_report` 工具生成正式报告。
+
+## 沟通原则
+- 用简洁专业的中文，避免过度堆砌术语
+- 对没有海外参展经验的企业，主动解释流程和注意事项
+- 诚实告知风险，不过度推销参展
+- 明确区分"已通过实时搜索确认"与"需进一步向主办方确认"的信息
+- 9项画像未全部收集前，不提前给出展会推荐
+
+## 开场白
+用1-2句话介绍自己的独特价值（实时数据优势），然后问第一个问题（公司主要产品）。不要一次性列出所有需要填写的信息。"""
 
 
 # ──────────────────────────────────────────────
 # 智能体核心
 # ──────────────────────────────────────────────
 
-class Agent:
+class ExhibitionAgent:
     def __init__(self, model: str = "claude-opus-4-7"):
         self.client = anthropic.Anthropic(
             api_key=os.environ.get("ANTHROPIC_API_KEY")
@@ -170,34 +387,34 @@ class Agent:
         handler = TOOL_HANDLERS.get(tool_name)
         if not handler:
             return json.dumps({"error": f"未知工具: {tool_name}"}, ensure_ascii=False)
-        result = handler(**tool_input)
-        return json.dumps(result, ensure_ascii=False)
+        try:
+            result = handler(**tool_input)
+            return json.dumps(result, ensure_ascii=False)
+        except Exception as exc:
+            return json.dumps({"error": str(exc)}, ensure_ascii=False)
 
     def chat(self, user_message: str) -> str:
-        """发送消息并获取回复（带流式输出和工具调用循环）。"""
+        """发送消息，处理工具调用循环，返回最终回复文本。"""
         self.messages.append({"role": "user", "content": user_message})
 
-        while True:
-            # 系统提示词缓存：将稳定的 system prompt 标记为可缓存
-            system = [
-                {
-                    "type": "text",
-                    "text": SYSTEM_PROMPT,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ]
+        system = [
+            {
+                "type": "text",
+                "text": SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
 
-            print("\n助手: ", end="", flush=True)
+        while True:
             full_text = ""
-            tool_use_blocks: list[dict] = []
+            tool_use_blocks: list = []
             stop_reason = ""
 
-            # 流式调用 API
             with self.client.messages.stream(
                 model=self.model,
-                max_tokens=4096,
+                max_tokens=8096,
                 system=system,
-                tools=TOOLS,
+                tools=ALL_TOOLS,
                 messages=self.messages,
             ) as stream:
                 for event in stream:
@@ -211,44 +428,48 @@ class Agent:
                 final = stream.get_final_message()
                 stop_reason = final.stop_reason
 
-                # 收集 tool_use 块
                 for block in final.content:
                     if block.type == "tool_use":
                         tool_use_blocks.append(block)
 
-            print()  # 换行
+            # 服务端工具（web_search）达到迭代上限，继续执行
+            if stop_reason == "pause_turn":
+                self.messages.append({"role": "assistant", "content": final.content})
+                continue
 
-            # 无工具调用 → 对话结束
-            if stop_reason != "tool_use":
-                self.messages.append({"role": "assistant", "content": full_text})
+            # 无客户端工具调用 → 对话结束
+            if stop_reason != "tool_use" or not tool_use_blocks:
+                print()
+                self.messages.append({"role": "assistant", "content": full_text or final.content})
                 return full_text
 
-            # 有工具调用：执行工具并将结果反馈给模型
-            # 先将助手回复（含 tool_use 块）追加到历史
-            self.messages.append(
-                {"role": "assistant", "content": final.content}
-            )
+            # 执行客户端工具
+            print()
+            self.messages.append({"role": "assistant", "content": final.content})
 
             tool_results = []
-            for tool_block in tool_use_blocks:
-                print(f"\n[调用工具: {tool_block.name}({tool_block.input})]")
-                result = self._execute_tool(tool_block.name, dict(tool_block.input))
-                print(f"[工具结果: {result}]")
+            for tb in tool_use_blocks:
+                print(f"\n[生成报告中...]")
+                raw = self._execute_tool(tb.name, dict(tb.input))
+                result_data = json.loads(raw)
+
+                if tb.name == "generate_assessment_report" and result_data.get("success"):
+                    print("\n" + result_data["report_text"])
+                    print(f"\n[报告已保存至：{result_data['file_path']}]")
+
                 tool_results.append(
                     {
                         "type": "tool_result",
-                        "tool_use_id": tool_block.id,
-                        "content": result,
+                        "tool_use_id": tb.id,
+                        "content": raw,
                     }
                 )
 
-            # 将工具结果作为 user 消息追加，继续循环
             self.messages.append({"role": "user", "content": tool_results})
 
     def reset(self):
-        """清空对话历史。"""
         self.messages.clear()
-        print("[对话已重置]")
+        print("[对话已重置，开始新的咨询]")
 
 
 # ──────────────────────────────────────────────
@@ -256,28 +477,35 @@ class Agent:
 # ──────────────────────────────────────────────
 
 def main():
-    print("=" * 50)
-    print("  Claude 智能体  (输入 /reset 重置, /quit 退出)")
-    print("=" * 50)
+    print("=" * 60)
+    print("  展会参展顾问 — 实时数据·智能匹配·可行性评估")
+    print("  输入 /reset 重新开始 | /quit 退出")
+    print("=" * 60)
 
-    agent = Agent()
+    agent = ExhibitionAgent()
+
+    print("\n顾问: ", end="", flush=True)
+    agent.chat("你好，我想咨询参展的事情。")
 
     while True:
         try:
             user_input = input("\n你: ").strip()
         except (EOFError, KeyboardInterrupt):
-            print("\n再见！")
+            print("\n感谢咨询，再见！")
             break
 
         if not user_input:
             continue
-        if user_input.lower() in ("/quit", "/exit", "退出"):
-            print("再见！")
+        if user_input.lower() in ("/quit", "/exit", "退出", "再见"):
+            print("感谢咨询，如有需要随时回来！再见！")
             break
         if user_input.lower() in ("/reset", "重置"):
             agent.reset()
+            print("\n顾问: ", end="", flush=True)
+            agent.chat("你好，我想咨询参展的事情。")
             continue
 
+        print("\n顾问: ", end="", flush=True)
         try:
             agent.chat(user_input)
         except anthropic.AuthenticationError:
