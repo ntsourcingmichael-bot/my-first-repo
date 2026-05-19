@@ -64,16 +64,17 @@ def save_lead(data: dict) -> None:
 
 def stream_response(agent: ExhibitionAgent, user_message: str) -> str:
     """在 Streamlit chat_message 上下文内调用，流式渲染 agent 回复。"""
-    placeholder = st.empty()
-    placeholder.markdown("*正在思考…*")
+    text_placeholder = st.empty()
     tokens: list[str] = []
 
     def on_token(text: str) -> None:
         tokens.append(text)
-        placeholder.markdown("".join(tokens) + "▌")
+        text_placeholder.markdown("".join(tokens) + "▌")
 
-    response = agent.chat(user_message, on_token=on_token)
-    placeholder.markdown(response or "（顾问正在整理信息，请稍候）")
+    with st.spinner("🔍 正在实时搜索匹配展会，请稍候…"):
+        response = agent.chat(user_message, on_token=on_token)
+
+    text_placeholder.markdown(response or "（顾问正在整理信息，请稍候）")
     return response or ""
 
 
