@@ -11,6 +11,40 @@ from datetime import datetime
 from pathlib import Path
 
 # ──────────────────────────────────────────────
+# 可选：Tavily 搜索（稳定替代方案）
+# 设置环境变量 TAVILY_API_KEY 后自动启用，否则使用 Anthropic 内置 web_search
+# ──────────────────────────────────────────────
+
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
+
+def tavily_search(query: str, max_results: int = 5) -> dict:
+    """调用 Tavily Search API，返回结构化搜索结果。"""
+    try:
+        import urllib.request
+        payload = json.dumps({
+            "api_key": TAVILY_API_KEY,
+            "query": query,
+            "search_depth": "basic",
+            "max_results": max_results,
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.tavily.com/search",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+        results = data.get("results", [])
+        formatted = "\n\n".join(
+            f"[{r.get('title','')}]\n{r.get('url','')}\n{r.get('content','')}"
+            for r in results
+        )
+        return {"success": True, "results": formatted}
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+# ──────────────────────────────────────────────
 # 工具实现（客户端执行）
 # ──────────────────────────────────────────────
 
@@ -128,9 +162,25 @@ def generate_assessment_report(
 # 工具定义
 # ──────────────────────────────────────────────
 
-BUILTIN_TOOLS = [
-    {"type": "web_search_20260209", "name": "web_search"},
-]
+# 有 TAVILY_API_KEY 时用客户端 Tavily 搜索，否则用 Anthropic 内置 web_search
+if TAVILY_API_KEY:
+    BUILTIN_TOOLS = []
+    TAVILY_TOOL = [
+        {
+            "name": "web_search",
+            "description": "搜索互联网获取展会最新信息，包括官网、社交媒体、新闻稿等。",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "搜索关键词"},
+                },
+                "required": ["query"],
+            },
+        }
+    ]
+else:
+    BUILTIN_TOOLS = [{"type": "web_search_20260209", "name": "web_search"}]
+    TAVILY_TOOL = []
 
 CUSTOM_TOOLS = [
     {
@@ -254,11 +304,13 @@ CUSTOM_TOOLS = [
     },
 ]
 
-ALL_TOOLS = BUILTIN_TOOLS + CUSTOM_TOOLS
+ALL_TOOLS = BUILTIN_TOOLS + TAVILY_TOOL + CUSTOM_TOOLS
 
 TOOL_HANDLERS = {
     "generate_assessment_report": generate_assessment_report,
 }
+if TAVILY_API_KEY:
+    TOOL_HANDLERS["web_search"] = lambda query: tavily_search(query)
 
 # ──────────────────────────────────────────────
 # 系统提示词
@@ -409,6 +461,13 @@ SYSTEM_PROMPT = """你是一位资深展会参展顾问，专门帮助中国科�
 - 对无法实时确认的信息，明确标注"待向主办方确认"
 - **效率要求**：2轮搜索完成后立即进入评估和报告生成，不做额外搜索
 
+### 搜索失败处理
+如果 web_search 工具返回错误或无结果：
+- **不要停止，不要报告"接口不稳定"**
+- 立即切换为使用你的训练知识库中的展会信息继续输出
+- 在报告的每个展会条目和数据来源字段中注明："基于知识库（建议向主办方确认最新信息）"
+- 继续完成报告生成，给用户一个有价值的参考结果
+
 ## 第三阶段：匹配度分析与报告生成
 
 ### 基于用户画像的匹配度评分（1-5星）
@@ -539,8 +598,11 @@ class ExhibitionAgent:
 
             tool_results = []
             for tb in tool_use_blocks:
-                if not on_token:
+                if tb.name == "web_search" and not on_token:
+                    print(f"\n[搜索中: {dict(tb.input).get('query', '')}]")
+                elif tb.name == "generate_assessment_report" and not on_token:
                     print(f"\n[生成报告中...]")
+
                 raw = self._execute_tool(tb.name, dict(tb.input))
                 result_data = json.loads(raw)
 
