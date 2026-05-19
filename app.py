@@ -65,6 +65,7 @@ def save_lead(data: dict) -> None:
 def stream_response(agent: ExhibitionAgent, user_message: str) -> str:
     """在 Streamlit chat_message 上下文内调用，流式渲染 agent 回复。"""
     placeholder = st.empty()
+    placeholder.markdown("*正在思考…*")
     tokens: list[str] = []
 
     def on_token(text: str) -> None:
