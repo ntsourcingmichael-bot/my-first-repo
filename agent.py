@@ -532,6 +532,42 @@ class ExhibitionAgent:
         except Exception as exc:
             return json.dumps({"error": str(exc)}, ensure_ascii=False)
 
+    def _clean_content(self, content) -> list | str:
+        """将 SDK 响应对象转为纯 dict，去除 cache_control 和空文本块。
+        避免多轮对话中 API 拒绝含 cache_control 的空文本块（400 错误）。
+        """
+        if isinstance(content, str):
+            return content
+        cleaned = []
+        for block in content:
+            btype = getattr(block, "type", None)
+            if btype == "text":
+                text = getattr(block, "text", "")
+                if not text:  # 跳过空文本块
+                    continue
+                cleaned.append({"type": "text", "text": text})
+            elif btype == "tool_use":
+                cleaned.append({
+                    "type": "tool_use",
+                    "id": block.id,
+                    "name": block.name,
+                    "input": block.input,
+                })
+            elif btype == "tool_result":
+                cleaned.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.tool_use_id,
+                    "content": block.content,
+                })
+            else:
+                # 其他类型：转 dict，去掉 cache_control
+                try:
+                    d = block.model_dump(exclude={"cache_control"})
+                    cleaned.append(d)
+                except Exception:
+                    pass  # 无法序列化的块直接跳过
+        return cleaned
+
     def chat(self, user_message: str, on_token=None) -> str:
         """发送消息，处理工具调用循环，返回最终回复文本。
 
@@ -581,20 +617,20 @@ class ExhibitionAgent:
 
             # 服务端工具（web_search）达到迭代上限，继续执行
             if stop_reason == "pause_turn":
-                self.messages.append({"role": "assistant", "content": final.content})
+                self.messages.append({"role": "assistant", "content": self._clean_content(final.content)})
                 continue
 
             # 无客户端工具调用 → 对话结束
             if stop_reason != "tool_use" or not tool_use_blocks:
                 if not on_token:
                     print()
-                self.messages.append({"role": "assistant", "content": full_text or final.content})
+                self.messages.append({"role": "assistant", "content": full_text or self._clean_content(final.content)})
                 return full_text
 
             # 执行客户端工具
             if not on_token:
                 print()
-            self.messages.append({"role": "assistant", "content": final.content})
+            self.messages.append({"role": "assistant", "content": self._clean_content(final.content)})
 
             tool_results = []
             for tb in tool_use_blocks:
